@@ -187,7 +187,6 @@ async function postMessages(msgs) {
   const inChat = ctx && ['group', 'room', 'utou'].includes(ctx.type);
   const send = async m => {
     if (inChat) { await liff.sendMessages(m); return 'sent'; }
-    if (!liff.isApiAvailable('shareTargetPicker')) throw new Error('LIFF ยังไม่ได้เปิด Share target picker');
     const res = await liff.shareTargetPicker(m, { isMultiple: false });
     return res ? 'sent' : 'cancel';
   };
@@ -201,7 +200,7 @@ async function postMessages(msgs) {
         return s;
       } catch (e2) { /* ตกไปข้างล่าง */ }
     }
-    alert('ส่งเข้ากลุ่มไม่สำเร็จ: ' + e.message);
+    alert('ส่งเข้ากลุ่มไม่สำเร็จ: ' + (e.code ? e.code + ' ' : '') + e.message);
     return 'fail';
   }
 }
