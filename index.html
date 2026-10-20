@@ -178,6 +178,51 @@ $('regBtn').onclick = async () => {
   b.disabled = false; b.textContent = 'ลงทะเบียน';
 };
 
+
+// ส่งข้อความเข้าแชท (ฟรี เป็นข้อความของผู้ใช้เอง)
+// เปิดจากในกลุ่ม → ส่งเข้ากลุ่มนั้นเลย / เปิดจากที่อื่น (แชทส่วนตัว, QR, เบราว์เซอร์) → ให้เลือกกลุ่มเอง
+// คืนค่า 'sent' | 'cancel' | 'fail'
+async function postMessages(msgs) {
+  const ctx = liff.getContext();
+  const inChat = ctx && ['group', 'room', 'utou'].includes(ctx.type);
+  const send = async m => {
+    if (inChat) { await liff.sendMessages(m); return 'sent'; }
+    if (!liff.isApiAvailable('shareTargetPicker')) throw new Error('LIFF ยังไม่ได้เปิด Share target picker');
+    const res = await liff.shareTargetPicker(m, { isMultiple: false });
+    return res ? 'sent' : 'cancel';
+  };
+  try {
+    return await send(msgs);
+  } catch (e) {
+    if (msgs.length > 1) { // รูปส่งไม่ผ่าน ลองส่งเฉพาะการ์ด
+      try {
+        const s = await send([msgs[0]]);
+        if (s === 'sent') alert('ส่งรูปเข้ากลุ่มไม่สำเร็จ รูปถูกเก็บในระบบแล้ว ส่งรูปเองในกลุ่มได้');
+        return s;
+      } catch (e2) { /* ตกไปข้างล่าง */ }
+    }
+    alert('ส่งเข้ากลุ่มไม่สำเร็จ: ' + e.message);
+    return 'fail';
+  }
+}
+
+// หน้าหลังบันทึก (ใช้เมื่อยังไม่ได้ส่งเข้ากลุ่ม หรือเปิดนอกแอปไลน์)
+function showDone(r, sent) {
+  show('formPage', false);
+  const msg = sent === 'sent' ? 'ส่งเข้ากลุ่มแล้ว'
+    : sent === 'cancel' ? 'ยังไม่ได้ส่งเข้ากลุ่ม (ข้อมูลบันทึกครบแล้ว)'
+    : 'ส่งเข้ากลุ่มไม่สำเร็จ (ข้อมูลบันทึกครบแล้ว)';
+  $('donePage').innerHTML = '✅ บันทึกแล้ว <b>' + r.id + '</b><br><br>' + msg +
+    (sent === 'sent' ? '' : '<br><br><button class="go" id="resendBtn">ส่งเข้ากลุ่มอีกครั้ง</button>');
+  show('donePage');
+  const rb = $('resendBtn');
+  if (rb) rb.onclick = async () => {
+    const s2 = await postMessages(r.messages);
+    if (s2 === 'sent' && liff.isInClient()) return liff.closeWindow();
+    showDone(r, s2);
+  };
+}
+
 $('sendBtn').onclick = async () => {
   // เลือก "อื่นๆ" ต้องพิมพ์รายละเอียด
   if (/^อื่นๆ/.test(S.symptom) && !$('note').value.trim()) {
@@ -192,22 +237,9 @@ $('sendBtn').onclick = async () => {
       machine:S.machine, symptom:S.symptom, note:$('note').value,
       cmms:$('cmms').value, stopped:S.stopped, photos:S.photos
     });
-    // ส่งการ์ด + รูป เข้ากลุ่มในนามผู้แจ้ง (ฟรี ไม่ต้องมีบอทในกลุ่ม)
-    const ctx = liff.getContext();
-    if (ctx && ['group', 'room', 'utou'].includes(ctx.type)) {
-      try {
-        await liff.sendMessages(r.messages);
-      } catch (e) {
-        // ถ้ารูปส่งไม่ผ่าน ส่งเฉพาะการ์ด เพื่อให้กลุ่มยังเห็นการแจ้ง
-        await liff.sendMessages([r.messages[0]]);
-        alert('ส่งรูปเข้ากลุ่มไม่สำเร็จ รูปถูกเก็บในระบบแล้ว ส่งรูปเองในกลุ่มได้');
-      }
-      liff.closeWindow();
-      return;
-    }
-    show('formPage', false);
-    $('donePage').innerHTML = '✅ บันทึกแล้ว <b>' + r.id + '</b><br><br>เปิดฟอร์มนี้จากในกลุ่มแจ้งซ่อม ระบบจะโพสต์เข้ากลุ่มให้อัตโนมัติ';
-    show('donePage');
+    const sent = await postMessages(r.messages);
+    if (sent === 'sent' && liff.isInClient()) return liff.closeWindow();
+    showDone(r, sent);
   } catch (err) {
     alert(err.message); b.disabled = false; b.textContent = 'ส่งแจ้งซ่อม';
   }
