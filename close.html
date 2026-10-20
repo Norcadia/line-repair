@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>อัปเดตงานซ่อม PDT-AA</title>
+<!--
+  หน้าอัปเดตงาน / ปิดงาน (LIFF ตัวที่ 2) — วางไว้ repo เดียวกับ index.html
+  LIFF ตัวนี้ตั้ง Endpoint URL = https://<user>.github.io/<repo>/close.html
+  แก้ 2 ค่าด้านล่างก่อนอัปโหลด
+-->
+<script>
+  const LIFF_ID = 'ใส่-LIFF-ID-ของหน้าปิดงาน';
+  const API_URL = 'https://script.google.com/macros/s/ใส่-DEPLOYMENT-ID/exec';
+</script>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root { --main:#06C755; --bg:#F5F6F7; --card:#fff; --text:#1F2328; --muted:#6B7280; --line:#E5E7EB; --red:#C62828; --amber:#E07B00; --done:#2E7D32; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,"Sarabun","Noto Sans Thai",sans-serif; background:var(--bg); color:var(--text); font-size:16px; }
+  header { background:var(--main); color:#fff; padding:14px 16px; font-weight:700; font-size:18px; }
+  main { padding:12px 16px 40px; }
+  section { background:var(--card); border-radius:12px; padding:14px; margin-bottom:12px; }
+  h2 { font-size:15px; margin:0 0 10px; color:var(--muted); font-weight:600; }
+  dl { margin:0; display:grid; grid-template-columns:84px 1fr; gap:6px 10px; font-size:15px; }
+  dt { color:var(--muted); } dd { margin:0; min-width:0; overflow-wrap:anywhere; }
+  .pill { display:inline-block; padding:2px 10px; border-radius:99px; color:#fff; font-size:13px; font-weight:600; }
+  label { display:block; font-size:14px; color:var(--muted); margin:10px 0 4px; }
+  input, select, textarea { width:100%; padding:12px; border:1.5px solid var(--line); border-radius:10px; font:inherit; font-size:16px; background:#fff; }
+  textarea { resize:vertical; line-height:1.5; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  button { width:100%; padding:14px; border:0; border-radius:12px; font:inherit; font-size:17px; font-weight:700; margin-top:12px; }
+  .go { background:var(--main); color:#fff; }
+  .sub { background:#fff; color:var(--text); border:1.5px solid var(--line); font-weight:600; }
+  .danger { background:#fff; color:var(--red); border:1.5px solid #F3C2C2; font-weight:600; }
+  button:disabled { opacity:.5; }
+  .msg { padding:20px 16px; text-align:center; }
+  .err { color:var(--red); }
+  .hint { font-size:13px; color:var(--muted); margin-top:4px; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<header>🛠️ อัปเดตงานซ่อม</header>
+<div id="loading" class="msg">กำลังโหลด...</div>
+<div id="fatal" class="msg err hide"></div>
+
+<main id="page" class="hide">
+  <!-- สรุปใบงาน -->
+  <section>
+    <h2 id="tId"></h2>
+    <dl id="tInfo"></dl>
+  </section>
+
+  <!-- ช่างมาถึง -->
+  <section id="arriveSec" class="hide">
+    <h2>ช่างมาถึงแล้ว</h2>
+    <label for="aTech">ชื่อช่างที่มาซ่อม</label>
+    <input id="aTech" type="text" placeholder="เช่น ช่างวีรยุทธ">
+    <label for="aStart">เวลาช่างมาถึง</label>
+    <input id="aStart" type="datetime-local">
+    <button class="go" id="arriveBtn">บันทึกช่างมาถึง</button>
+    <button class="sub" id="skipBtn">ซ่อมเสร็จแล้ว ไปปิดงานเลย</button>
+  </section>
+
+  <!-- รออะไหล่ -->
+  <section id="holdSec" class="hide">
+    <button class="sub" id="holdBtn"></button>
+  </section>
+
+  <!-- ปิดงาน -->
+  <section id="closeSec" class="hide">
+    <h2 id="closeTitle">ปิดงาน</h2>
+    <label for="cTech">ชื่อช่างที่มาซ่อม</label>
+    <input id="cTech" type="text">
+    <div class="two">
+      <div><label for="cStart">เริ่มซ่อม</label><input id="cStart" type="datetime-local"></div>
+      <div><label for="cDone">ซ่อมเสร็จ</label><input id="cDone" type="datetime-local"></div>
+    </div>
+    <label for="cCat">รายการปัญหา</label>
+    <select id="cCat"></select>
+    <label for="cName">ชื่อปัญหา</label>
+    <select id="cName"></select>
+    <label for="cDetail">สาเหตุ (ถามช่าง)</label>
+    <textarea id="cDetail" rows="2" maxlength="500" placeholder="เช่น สายพานยืด ตั้งความตึงไม่ได้"></textarea>
+    <label for="cFix">การแก้ไข</label>
+    <textarea id="cFix" rows="2" maxlength="500" placeholder="เช่น เปลี่ยนสายพานใหม่ 2 เส้น"></textarea>
+    <div class="two">
+      <div><label for="cParts">ค่าอะไหล่ (บาท)</label><input id="cParts" type="number" inputmode="decimal" min="0"></div>
+      <div><label for="cHours">ชั่วโมงช่าง</label><input id="cHours" type="number" inputmode="decimal" min="0" step="0.25"></div>
+    </div>
+    <div class="hint">ไม่รู้ค่าอะไหล่หรือชั่วโมงช่าง เว้นว่างได้ หัวหน้าเติมทีหลัง</div>
+    <label for="cScada">ชุดผลิต SCADA (ถ้ามี)</label>
+    <input id="cScada" type="text" placeholder="เช่น ML10/0001" autocapitalize="characters">
+    <button class="go" id="closeBtn">ปิดงาน</button>
+  </section>
+
+  <!-- ยกเลิก -->
+  <section id="cancelSec" class="hide">
+    <h2>ยกเลิกงาน (แจ้งผิด / แจ้งซ้ำ)</h2>
+    <input id="xReason" type="text" placeholder="เหตุผล">
+    <button class="danger" id="cancelBtn">ยกเลิกงานนี้</button>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const show = (id, on = true) => $(id).classList.toggle('hide', !on);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const STATUS_COLOR = { 'รอรับงาน':'var(--red)', 'กำลังซ่อม':'var(--amber)', 'รออะไหล่':'var(--amber)', 'ซ่อมเสร็จ':'var(--done)', 'ยกเลิก':'var(--muted)' };
+let D = null, ID = '';
+
+function nowLocal() {
+  const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+const fmt = s => s ? s.replace('T', ' ').replace(/^(\d{4})-(\d\d)-(\d\d)/, '$3/$2/$1') : '-';
+
+async function api(action, data) {
+  const res = await fetch(API_URL, { method:'POST', body: JSON.stringify({ action, idToken: liff.getIDToken(), data }) });
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || 'เกิดข้อผิดพลาด');
+  return j;
+}
+
+// ส่งการ์ดเข้ากลุ่ม (ถ้ามี) แล้วปิดหน้า
+async function finish(r, okText) {
+  const ctx = liff.getContext();
+  if (r.messages && r.messages.length && ctx && ['group', 'room', 'utou'].includes(ctx.type)) {
+    try { await liff.sendMessages(r.messages); } catch (e) { /* บันทึกแล้ว แค่โพสต์ไม่ได้ */ }
+  }
+  if (liff.isInClient()) return liff.closeWindow();
+  show('page', false); $('fatal').textContent = okText; $('fatal').classList.remove('err'); show('fatal');
+}
+
+async function run(btn, fn) {
+  const label = btn.textContent; btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+  try { await fn(); } catch (e) { alert(e.message); btn.disabled = false; btn.textContent = label; }
+}
+
+function fillNames(cat, current) {
+  const p = D.problems.find(x => x.cat === cat);
+  $('cName').innerHTML = '<option value="">-- เลือกชื่อปัญหา --</option>' +
+    (p ? p.names.map(n => '<option' + (n === current ? ' selected' : '') + '>' + esc(n) + '</option>').join('') : '');
+}
+
+function render() {
+  const t = D.ticket;
+  $('tId').innerHTML = esc(t.id) + ' <span class="pill" style="background:' + (STATUS_COLOR[t.status] || 'var(--muted)') + '">' + esc(t.status) + '</span>';
+  const rows = [
+    ['เครื่อง', t.machine + (t.phase ? ' (เฟส ' + t.phase + ')' : '')],
+    ['อาการ', t.symptom], ['รายละเอียด', t.note], ['เครื่องหยุด', t.stopped === 'Y' ? 'หยุด' : 'ไม่หยุด'],
+    ['CMMS', t.cmms], ['ผู้แจ้ง', t.reporter + ' กะ ' + t.shift], ['แจ้งเมื่อ', fmt(t.time)]
+  ];
+  if (t.tech) rows.push(['ช่าง', t.tech], ['เริ่มซ่อม', fmt(t.start)]);
+  if (t.done) rows.push(['ซ่อมเสร็จ', fmt(t.done)], ['ปัญหา', t.name], ['ปิดโดย', t.closer]);
+  $('tInfo').innerHTML = rows.filter(r => r[1]).map(r => '<dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd>').join('');
+
+  show('arriveSec', D.can.arrive);
+  $('aStart').value = nowLocal();
+
+  show('holdSec', D.can.hold);
+  $('holdBtn').textContent = t.status === 'รออะไหล่' ? 'ได้อะไหล่แล้ว กลับมาซ่อมต่อ' : 'รออะไหล่';
+
+  // ฟอร์มปิดงาน: งานที่กำลังซ่อม/รออะไหล่ แสดงเลย, งานรอรับงานแสดงเมื่อกด "ไปปิดงานเลย"
+  show('closeSec', D.can.close && !D.can.arrive);
+  $('closeTitle').textContent = t.status === 'ซ่อมเสร็จ' ? 'แก้ไขผลการซ่อม (หัวหน้า)' : 'ปิดงาน';
+  $('closeBtn').textContent = t.status === 'ซ่อมเสร็จ' ? 'บันทึกการแก้ไข' : 'ปิดงาน';
+  $('cTech').value = t.tech || '';
+  $('cStart').value = t.start || t.time;
+  $('cDone').value = t.done || nowLocal();
+  const cat = t.cat || D.suggestCat || '';
+  $('cCat').innerHTML = '<option value="">-- เลือกรายการปัญหา --</option>' +
+    D.problems.map(p => '<option' + (p.cat === cat ? ' selected' : '') + '>' + esc(p.cat) + '</option>').join('');
+  fillNames(cat, t.name);
+  $('cDetail').value = t.detail || '';
+  $('cFix').value = t.fix || '';
+  $('cParts').value = t.parts ?? '';
+  $('cHours').value = t.hours ?? '';
+  $('cScada').value = t.scada || '';
+
+  show('cancelSec', D.can.cancel);
+}
+
+$('cCat').onchange = () => fillNames($('cCat').value, '');
+$('skipBtn').onclick = () => { show('arriveSec', false); show('closeSec'); $('cTech').focus(); };
+
+$('arriveBtn').onclick = () => run($('arriveBtn'), async () => {
+  const r = await api('arrive', { id: ID, tech: $('aTech').value, start: $('aStart').value });
+  await finish(r, 'บันทึกช่างมาถึงแล้ว');
+});
+
+$('holdBtn').onclick = () => run($('holdBtn'), async () => {
+  const r = await api('hold', { id: ID });
+  await finish(r, 'อัปเดตสถานะแล้ว');
+});
+
+$('closeBtn').onclick = () => run($('closeBtn'), async () => {
+  if (!$('cCat').value || !$('cName').value) throw new Error('กรุณาเลือกรายการปัญหาและชื่อปัญหา');
+  const r = await api('close', {
+    id: ID, tech: $('cTech').value, start: $('cStart').value, done: $('cDone').value,
+    cat: $('cCat').value, name: $('cName').value, detail: $('cDetail').value, fix: $('cFix').value,
+    parts: $('cParts').value, hours: $('cHours').value, scada: $('cScada').value
+  });
+  await finish(r, 'ปิดงานแล้ว');
+});
+
+$('cancelBtn').onclick = () => run($('cancelBtn'), async () => {
+  const r = await api('cancel', { id: ID, reason: $('xReason').value });
+  await finish(r, 'ยกเลิกงานแล้ว');
+});
+
+// อ่านเลขใบงานจาก ?id=... (หลัง liff.init URL จะถูกแปลงจาก liff.state ให้แล้ว)
+function readId() {
+  const p = new URLSearchParams(location.search);
+  if (p.get('id')) return p.get('id');
+  const st = p.get('liff.state');
+  return st ? new URLSearchParams(st.replace(/^[^?]*\?/, '')).get('id') : '';
+}
+
+(async () => {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+    ID = readId();
+    D = await api('ticket', { id: ID });
+    show('loading', false); show('page'); render();
+  } catch (err) {
+    show('loading', false);
+    $('fatal').textContent = 'เปิดใบงานไม่สำเร็จ: ' + err.message;
+    show('fatal');
+  }
+})();
+</script>
+</body>
+</html>

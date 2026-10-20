@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>แจ้งซ่อม PDT-AA</title>
+<!--
+  ฟอร์มแจ้งซ่อม (LIFF) — วางไฟล์นี้บน GitHub Pages (ฟรี)
+  แก้ 2 ค่าด้านล่างก่อนอัปโหลด:
+    LIFF_ID  = LIFF ID จาก LINE Developers (LINE Login channel > LIFF)
+    API_URL  = Web App URL ของ Apps Script (ลงท้าย /exec) — ไม่ต้องใส่ ?key
+-->
+<script>
+  const LIFF_ID = 'ใส่-LIFF-ID';
+  const API_URL = 'https://script.google.com/macros/s/ใส่-DEPLOYMENT-ID/exec';
+</script>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root { --main:#06C755; --bg:#F5F6F7; --card:#fff; --text:#1F2328; --muted:#6B7280; --line:#E5E7EB; --red:#C62828; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,"Sarabun","Noto Sans Thai",sans-serif; background:var(--bg); color:var(--text); font-size:16px; }
+  header { background:var(--main); color:#fff; padding:14px 16px; font-weight:700; font-size:18px; }
+  main { padding:12px 16px 120px; }
+  section { background:var(--card); border-radius:12px; padding:14px; margin-bottom:12px; }
+  h2 { font-size:15px; margin:0 0 10px; color:var(--muted); font-weight:600; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { border:1.5px solid var(--line); background:#fff; border-radius:10px; padding:12px 14px; font-size:16px; min-width:72px; text-align:center; }
+  .chip.on { border-color:var(--main); background:#E8F9EF; font-weight:700; }
+  textarea { width:100%; padding:12px; border:1.5px solid var(--line); border-radius:10px; font:inherit; font-size:16px; resize:vertical; line-height:1.5; }
+  input[type=text], select { width:100%; padding:12px; border:1.5px solid var(--line); border-radius:10px; font-size:16px; }
+  .row { display:flex; gap:8px; }
+  .row .chip { flex:1; }
+  .thumbs { display:flex; gap:8px; margin-top:10px; }
+  .thumbs img { width:84px; height:84px; object-fit:cover; border-radius:8px; }
+  .hint { font-size:13px; color:var(--muted); margin-top:6px; }
+  .bar { position:fixed; left:0; right:0; bottom:0; background:#fff; padding:12px 16px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); }
+  button.go { width:100%; padding:16px; border:0; border-radius:12px; background:var(--main); color:#fff; font-size:18px; font-weight:700; }
+  button.go:disabled { background:#A7DDBC; }
+  .msg { padding:20px 16px; text-align:center; }
+  .err { color:var(--red); }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<header>🔧 แจ้งซ่อม PDT-AA</header>
+
+<div id="loading" class="msg">กำลังโหลด...</div>
+<div id="fatal" class="msg err hide"></div>
+
+<!-- หน้าลงทะเบียน (ครั้งแรกครั้งเดียว) -->
+<main id="regPage" class="hide">
+  <section>
+    <h2>ลงทะเบียนครั้งแรก</h2>
+    <input id="empId" type="text" inputmode="numeric" placeholder="รหัสพนักงาน">
+    <div style="height:8px"></div>
+    <input id="fullName" type="text" placeholder="ชื่อ-สกุล">
+    <div style="height:8px"></div>
+    <div class="row" id="shiftChips">
+      <div class="chip" data-v="A">กะ A</div><div class="chip" data-v="B">กะ B</div>
+    </div>
+  </section>
+  <div class="bar"><button class="go" id="regBtn">ลงทะเบียน</button></div>
+</main>
+
+<!-- หน้าแจ้งซ่อม -->
+<main id="formPage" class="hide">
+  <section><h2>1. ประเภทเครื่อง</h2><div class="chips" id="typeChips"></div></section>
+  <section id="machineSec" class="hide"><h2>2. เครื่องที่มีปัญหา</h2><div class="chips" id="machineChips"></div></section>
+  <section id="symptomSec" class="hide">
+    <h2>3. อาการ</h2><div class="chips" id="symptomChips"></div>
+  </section>
+  <section id="noteSec" class="hide">
+    <h2><label for="note">4. รายละเอียดอาการ</label></h2>
+    <textarea id="note" rows="3" maxlength="300" placeholder="เช่น สายพานตัวบนหลุด เสียงดังก่อนหยุด เกิดตอนไหน เคยเป็นมาก่อนไหม"></textarea>
+    <div class="hint" id="noteHint">ไม่บังคับ แต่ช่วยให้ช่างเตรียมอะไหล่ได้ถูก</div>
+  </section>
+  <section id="moreSec" class="hide">
+    <h2>5. เครื่องหยุดไหม</h2>
+    <div class="row" id="stopChips">
+      <div class="chip on" data-v="Y">หยุด</div><div class="chip" data-v="N">ยังเดินได้</div>
+    </div>
+    <div style="height:12px"></div>
+    <h2>6. เลขใบแจ้งซ่อม CMMS</h2>
+    <input id="cmms" type="text" placeholder="เช่น RP26-8933" autocapitalize="characters">
+    <div class="hint">เปิดใบใน CMMS ก่อน แล้วกรอกเลข RP ไม่ต้องถ่ายรูปหน้าจอ</div>
+    <div style="height:12px"></div>
+    <h2>7. รูปจุดที่เสีย (ไม่เกิน 3 รูป)</h2>
+    <input id="photo" type="file" accept="image/*" multiple>
+    <div class="thumbs" id="thumbs"></div>
+  </section>
+  <div class="bar"><button class="go" id="sendBtn" disabled>ส่งแจ้งซ่อม</button></div>
+</main>
+
+<div id="donePage" class="msg hide"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const show = (id, on = true) => $(id).classList.toggle('hide', !on);
+const S = { masters:null, type:'', machine:'', symptom:'', stopped:'Y', shift:'', photos:[] };
+
+// เรียก Apps Script — ส่งแบบ text/plain เพื่อเลี่ยง CORS preflight
+async function api(action, data) {
+  const res = await fetch(API_URL, { method:'POST', body: JSON.stringify({ action, idToken: liff.getIDToken(), data }) });
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || 'เกิดข้อผิดพลาด');
+  return j;
+}
+
+function chips(boxId, items, onPick, current) {
+  const box = $(boxId); box.innerHTML = '';
+  items.forEach(it => {
+    const d = document.createElement('div');
+    d.className = 'chip' + (it.v === current ? ' on' : '');
+    d.textContent = it.label; d.onclick = () => onPick(it.v);
+    box.appendChild(d);
+  });
+}
+
+function render() {
+  const M = S.masters;
+  chips('typeChips', M.types.map(t => ({ v:t.code, label:t.name })), v => {
+    S.type = v; S.machine = ''; S.symptom = ''; render();
+  }, S.type);
+
+  show('machineSec', !!S.type);
+  if (S.type) chips('machineChips',
+    M.machines.filter(m => m.type === S.type).map(m => ({ v:m.code, label:m.code + (m.phase ? ' · ' + m.phase : '') })),
+    v => { S.machine = v; render(); }, S.machine);
+
+  show('symptomSec', !!S.machine);
+  if (S.machine) chips('symptomChips',
+    (M.symptoms[S.type] || ['อื่นๆ (พิมพ์เพิ่ม)']).map(s => ({ v:s, label:s })),
+    v => { S.symptom = v; render(); }, S.symptom);
+
+  show('noteSec', !!S.symptom);
+  show('moreSec', !!S.symptom);
+  $('sendBtn').disabled = !(S.machine && S.symptom);
+}
+
+// ย่อรูปก่อนส่ง ด้านยาวไม่เกิน 1280px
+function shrink(file) {
+  return new Promise((ok, bad) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, 1280 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url); ok(c.toDataURL('image/jpeg', 0.75));
+    };
+    img.onerror = bad; img.src = url;
+  });
+}
+
+$('photo').onchange = async e => {
+  const files = [...e.target.files].slice(0, 3);
+  S.photos = await Promise.all(files.map(shrink));
+  $('thumbs').innerHTML = S.photos.map(p => '<img src="' + p + '">').join('');
+};
+
+$('stopChips').onclick = e => {
+  const v = e.target.dataset.v; if (!v) return;
+  S.stopped = v;
+  [...$('stopChips').children].forEach(c => c.classList.toggle('on', c.dataset.v === v));
+};
+$('shiftChips').onclick = e => {
+  const v = e.target.dataset.v; if (!v) return;
+  S.shift = v;
+  [...$('shiftChips').children].forEach(c => c.classList.toggle('on', c.dataset.v === v));
+};
+
+$('regBtn').onclick = async () => {
+  const b = $('regBtn'); b.disabled = true; b.textContent = 'กำลังบันทึก...';
+  try {
+    await api('register', { empId:$('empId').value, fullName:$('fullName').value, shift:S.shift });
+    show('regPage', false); show('formPage'); render();
+  } catch (err) { alert(err.message); }
+  b.disabled = false; b.textContent = 'ลงทะเบียน';
+};
+
+$('sendBtn').onclick = async () => {
+  // เลือก "อื่นๆ" ต้องพิมพ์รายละเอียด
+  if (/^อื่นๆ/.test(S.symptom) && !$('note').value.trim()) {
+    $('noteHint').textContent = 'เลือก "อื่นๆ" ต้องพิมพ์รายละเอียดอาการ';
+    $('noteHint').classList.add('err');
+    $('note').focus();
+    return;
+  }
+  const b = $('sendBtn'); b.disabled = true; b.textContent = 'กำลังส่ง...';
+  try {
+    const r = await api('report', {
+      machine:S.machine, symptom:S.symptom, note:$('note').value,
+      cmms:$('cmms').value, stopped:S.stopped, photos:S.photos
+    });
+    // ส่งการ์ด + รูป เข้ากลุ่มในนามผู้แจ้ง (ฟรี ไม่ต้องมีบอทในกลุ่ม)
+    const ctx = liff.getContext();
+    if (ctx && ['group', 'room', 'utou'].includes(ctx.type)) {
+      try {
+        await liff.sendMessages(r.messages);
+      } catch (e) {
+        // ถ้ารูปส่งไม่ผ่าน ส่งเฉพาะการ์ด เพื่อให้กลุ่มยังเห็นการแจ้ง
+        await liff.sendMessages([r.messages[0]]);
+        alert('ส่งรูปเข้ากลุ่มไม่สำเร็จ รูปถูกเก็บในระบบแล้ว ส่งรูปเองในกลุ่มได้');
+      }
+      liff.closeWindow();
+      return;
+    }
+    show('formPage', false);
+    $('donePage').innerHTML = '✅ บันทึกแล้ว <b>' + r.id + '</b><br><br>เปิดฟอร์มนี้จากในกลุ่มแจ้งซ่อม ระบบจะโพสต์เข้ากลุ่มให้อัตโนมัติ';
+    show('donePage');
+  } catch (err) {
+    alert(err.message); b.disabled = false; b.textContent = 'ส่งแจ้งซ่อม';
+  }
+};
+
+(async () => {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) { liff.login(); return; }
+    const [me, masters] = await Promise.all([
+      api('me'),
+      fetch(API_URL + '?action=masters').then(r => r.json())
+    ]);
+    S.masters = masters;
+    show('loading', false);
+    if (!me.registered) return show('regPage');
+    if (!me.active) { $('fatal').textContent = 'บัญชีของคุณถูกระงับ ติดต่อหัวหน้างาน'; return show('fatal'); }
+    show('formPage'); render();
+  } catch (err) {
+    show('loading', false);
+    $('fatal').textContent = 'เปิดฟอร์มไม่สำเร็จ: ' + err.message;
+    show('fatal');
+  }
+})();
+</script>
+</body>
+</html>
