@@ -205,15 +205,37 @@ async function postMessages(msgs) {
   }
 }
 
+// ข้อความสรุปสำหรับคัดลอกไปวางในกลุ่มเอง (ใช้เมื่อส่งอัตโนมัติไม่ได้ เช่น บนคอม)
+function summaryText(r) {
+  const m = (S.masters.machines || []).find(x => x.code === S.machine) || {};
+  const note = $('note').value.trim(), cmms = $('cmms').value.trim().toUpperCase();
+  return ['🔧 แจ้งซ่อม ' + r.id,
+    'เครื่อง: ' + S.machine + (m.phase ? ' (เฟส ' + m.phase + ')' : ''),
+    'อาการ: ' + S.symptom + (note ? ' — ' + note : ''),
+    'CMMS: ' + (cmms || '-'),
+    'เครื่องหยุด: ' + (S.stopped === 'N' ? 'ไม่หยุด' : 'หยุด'),
+    'เวลา: ' + r.time].join('\n');
+}
+
 // หน้าหลังบันทึก (ใช้เมื่อยังไม่ได้ส่งเข้ากลุ่ม หรือเปิดนอกแอปไลน์)
 function showDone(r, sent) {
   show('formPage', false);
   const msg = sent === 'sent' ? 'ส่งเข้ากลุ่มแล้ว'
+    : sent === 'pc' ? 'กดคัดลอกข้อความด้านล่าง แล้วไปวางในกลุ่มแจ้งซ่อมในไลน์บนคอม'
     : sent === 'cancel' ? 'ยังไม่ได้ส่งเข้ากลุ่ม (ข้อมูลบันทึกครบแล้ว)'
     : 'ส่งเข้ากลุ่มไม่สำเร็จ (ข้อมูลบันทึกครบแล้ว)';
   $('donePage').innerHTML = '✅ บันทึกแล้ว <b>' + r.id + '</b><br><br>' + msg +
-    (sent === 'sent' ? '' : '<br><br><button class="go" id="resendBtn">ส่งเข้ากลุ่มอีกครั้ง</button>');
+    (sent === 'sent' ? '' : (sent === 'pc' ? '' : '<br><br><button class="go" id="resendBtn">ส่งเข้ากลุ่มอีกครั้ง</button>') +
+      '<br><br><button class="go" id="copyBtn" style="background:#fff;color:#1F2328;border:1.5px solid #E5E7EB">คัดลอกข้อความไปวางในกลุ่มเอง</button>' +
+      '<textarea id="copyText" rows="6" style="margin-top:12px" readonly></textarea>');
   show('donePage');
+  const ct = $('copyText');
+  if (ct) ct.value = summaryText(r);
+  const cb = $('copyBtn');
+  if (cb) cb.onclick = async () => {
+    try { await navigator.clipboard.writeText(ct.value); cb.textContent = 'คัดลอกแล้ว ไปวางในกลุ่มได้เลย'; }
+    catch (e) { ct.focus(); ct.select(); cb.textContent = 'กด Ctrl+C เพื่อคัดลอก'; }
+  };
   const rb = $('resendBtn');
   if (rb) rb.onclick = async () => {
     const s2 = await postMessages(r.messages);
@@ -236,7 +258,9 @@ $('sendBtn').onclick = async () => {
       machine:S.machine, symptom:S.symptom, note:$('note').value,
       cmms:$('cmms').value, stopped:S.stopped, photos:S.photos
     });
-    const sent = await postMessages(r.messages);
+    // บนคอม หน้าเลือกปลายทางของไลน์แสดงแค่รายชื่อเพื่อน ไม่มีกลุ่ม → ข้ามไปหน้าคัดลอกข้อความเลย
+    const onPc = !liff.isInClient() && liff.getOS() === 'web';
+    const sent = onPc ? 'pc' : await postMessages(r.messages);
     if (sent === 'sent' && liff.isInClient()) return liff.closeWindow();
     showDone(r, sent);
   } catch (err) {
@@ -247,6 +271,15 @@ $('sendBtn').onclick = async () => {
 (async () => {
   try {
     await liff.init({ liffId: LIFF_ID });
+    // มือถือ: ใช้ได้เฉพาะในแอปไลน์ (Safari/Chrome บนมือถือ ล็อกอินแล้วสลับแอป ทำให้หน้าค้าง)
+    // คอม (getOS = web): เปิดในเบราว์เซอร์ได้ ล็อกอินไลน์ครั้งแรกแล้วใช้หน้าเลือกกลุ่มส่ง
+    if (!liff.isInClient() && liff.getOS() !== 'web') {
+      show('loading', false);
+      const url = 'https://liff.line.me/' + LIFF_ID + location.search.replace(/[?&](code|state|liffClientId|liffRedirectUri)=[^&]*/g, '').replace(/^&/, '?');
+      $('fatal').innerHTML = 'กรุณาเปิดฟอร์มนี้ในแอปไลน์<br><br>กดลิงก์ในประกาศกลุ่มแจ้งซ่อม หรือแชทในไลน์<br><br><a href="' + url + '">เปิดในแอปไลน์</a>';
+      show('fatal');
+      return;
+    }
     if (!liff.isLoggedIn()) { liff.login(); return; }
     const [me, masters] = await Promise.all([
       api('me'),
